@@ -1,0 +1,78 @@
+#!/bin/bash
+set -e
+
+# Load shared colors
+source "$(dirname "$0")/colors.sh"
+
+# Ruta base
+BASE_PATH="/home/adrian/Documents/Work/docker-sites"
+SERVERS_PATH="$BASE_PATH/Servers"
+
+show_usage() {
+    echo -e "${BLUE}Docker Dev Environment Manager${NC}"
+    echo -e "Usage: $(basename "$0") <command>"
+    echo
+    echo -e "${YELLOW}Commands:${NC}"
+    echo "  start    Start development environment"
+    echo "  stop     Stop development environment"
+    echo "  restart  Restart development environment"
+    echo "  status   Show environment status"
+}
+
+start_env() {
+    info "Starting development environment..."
+    (
+        cd "$SERVERS_PATH"
+        docker compose \
+            -f docker-compose-mariadb.yml \
+            -f docker-compose-varnish.yml \
+            -f docker-compose-ssl.yml \
+            -f docker-compose-network.yml \
+            -f docker-compose-web7.yml \
+            -f docker-compose-node.yml \
+            up --build -d
+    )
+    success "Development environment is running."
+}
+
+stop_env() {
+    info "Stopping development environment..."
+    (
+        cd "$SERVERS_PATH"
+        docker compose \
+            -f docker-compose-mariadb.yml \
+            -f docker-compose-varnish.yml \
+            -f docker-compose-ssl.yml \
+            -f docker-compose-network.yml \
+            -f docker-compose-web7.yml \
+            -f docker-compose-node.yml \
+            down --remove-orphans
+    )
+    success "Development environment stopped."
+}
+
+show_status() {
+    info "Development environment status:"
+    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "(web7|mariadb|varnish|ssl|node)" || echo "No development containers running"
+}
+
+case "${1:-}" in
+    start)
+        start_env
+        ;;
+    stop)
+        stop_env
+        ;;
+    restart)
+        stop_env
+        sleep 2
+        start_env
+        ;;
+    status)
+        show_status
+        ;;
+    *)
+        show_usage
+        exit 1
+        ;;
+esac

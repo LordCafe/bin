@@ -1,11 +1,7 @@
 #!/bin/bash
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Load shared colors
+source "$(dirname "$0")/colors.sh"
 
 show_usage() {
     echo -e "${BLUE}Usage:${NC} $(basename $0) [container_name] [options]"

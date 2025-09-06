@@ -1,5 +1,0 @@
-#!/bin/bash
-
-cd /var/www/html/Docker/Node  && docker compose \
--f docker-compose-node.yml \
-up --build -d  

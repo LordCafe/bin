@@ -1,7 +1,9 @@
 #!/bin/bash 
 if [ -f "$HOME/bin/.env" ]; then 
     echo "obteniendo variables de entorno"
-    export $( grep -v '^#' "$HOME/bin/.env" | xargs)
+    set -a
+    source "$HOME/bin/.env"
+    set +a
 fi
 
 if [[ -z "$WORKSPACES_DIR" ]]; then

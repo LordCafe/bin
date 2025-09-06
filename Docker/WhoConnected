@@ -1,14 +1,10 @@
 #!/bin/bash
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Load shared colors
+source "$(dirname "$0")/colors.sh"
 
 show_usage() {
-    echo -e "${BLUE}Usage:${NC} $(basename $0) [network_name] [options]"
+    echo -e "${BLUE}Usage:${NC} $(basename "$0") [network_name] [options]"
     echo -e "${BLUE}Options:${NC}"
     echo "  -a, --all     Show all networks (including unused)"
     echo "  -h, --help    Show this help"
