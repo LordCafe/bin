@@ -4,8 +4,8 @@ set -e
 # Load shared colors
 source "$(dirname "$0")/colors.sh"
 
-# Ruta base
-BASE_PATH="/home/adrian/Documents/Work/docker-sites"
+# Ruta base desde variable de entorno
+BASE_PATH="${DOCKER_SITES_PATH:-$HOME/Documents/Work/docker-sites}"
 SERVERS_PATH="$BASE_PATH/Servers"
 
 show_usage() {
