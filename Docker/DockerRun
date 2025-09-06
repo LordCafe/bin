@@ -1,0 +1,5 @@
+#!/bin/bash
+
+#  pwd es la ruta en la que se intentara dirigir el docker.
+
+docker exec -w $(pwd) -it $@  

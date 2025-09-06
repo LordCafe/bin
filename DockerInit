@@ -1,0 +1,24 @@
+#!/bin/bash
+set -e
+
+# Ruta base
+BASE_PATH="/home/adrian/Documents/Work/docker-sites"
+SERVERS_PATH="$BASE_PATH/Servers"
+
+# Iniciar servicios específicos en orden
+(
+cd $SERVERS_PATH
+
+echo "Iniciando  los servicios..."
+ docker compose \
+-f docker-compose-mariadb.yml \
+-f docker-compose-varnish.yml \
+-f docker-compose-ssl.yml \
+-f docker-compose-network.yml \
+-f docker-compose-web7.yml \
+up --build -d 
+)
+
+echo "Todos los servicios están en ejecución."
+$SHELL
+

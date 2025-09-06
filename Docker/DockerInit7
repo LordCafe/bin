@@ -1,0 +1,18 @@
+#!/bin/bash
+(
+
+cd /home/adrian/Documents/Work/docker-sites/Servers
+
+ docker compose \
+-f docker-compose-mariadb.yml \
+-f docker-compose-varnish.yml \
+-f docker-compose-ssl.yml \
+-f docker-compose-network.yml \
+-f docker-compose-web7.yml \
+up --build -d 
+
+) 
+
+
+$SHELL
+

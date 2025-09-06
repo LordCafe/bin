@@ -1,0 +1,12 @@
+#!/bin/bash
+(
+
+cd /var/www/html/Docker/Node-22  && docker compose \
+-f docker-compose-node.yml \
+up --build -d 
+
+
+)
+
+
+$SHELL

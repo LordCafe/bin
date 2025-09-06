@@ -1,0 +1,14 @@
+#!/bin/bash
+(
+
+cd /home/adrian/Documents/Work/docker-sites/Servers
+
+ docker-compose \
+   -f docker-compose-reactExcelsior.yml\
+ up --build -d 
+
+) 
+
+
+$SHELL
+

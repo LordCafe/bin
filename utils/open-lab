@@ -1,0 +1,48 @@
+#!/bin/bash 
+if [ -f "$HOME/bin/.env" ]; then 
+    echo "obteniendo variables de entorno"
+    export $( grep -v '^#' "$HOME/bin/.env" | xargs)
+fi
+
+if [[ -z "$WORKSPACES_DIR" ]]; then
+  echo "La variable WORKSPACES_DIR no esta definida."
+  exit 1
+fi
+
+#Declarar un array asociativo : nombre archivo → ruta
+
+declare -A ws_map
+
+
+# Llenar el diccionario automaticamente desde el WORKSPACE_DIR
+
+for ws_path in "$WORKSPACES_DIR"/*.code-workspace; do
+  ws_name=$(basename "$ws_path" .code-workspace)
+  ws_map["$ws_name"]="$ws_path"
+done
+
+
+show_menu(){
+  PS3="Selecione un workspace: "
+  select ws  in "${!ws_map[@]}"; do
+    if [[ -n "$ws" ]]; then 
+      echo "Abriendo workspace $ws"
+      code "${ws_map[$ws]}"
+      break
+    else
+      echo "Opcion invalida"
+    fi
+  done 
+}
+
+if [[ -n "$1" ]]; then
+  key="$1"
+  if [[ -n "${ws_map[$key]}" ]]; then 
+    code "${ws_map[$key]}"
+  else
+    echo "No se encontro el workspace $key"
+    show_menu
+  fi
+else 
+show_menu
+fi

@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+
+import time
+
+def main():
+  print("Iniciando Cronometro... (Ctrl + C para detenerlo)")
+  start = time.time();
+  try:
+    while True:
+      elapsed = time.time() - start 
+      minutes =  int( elapsed / 60 )
+      seconds =  int ( elapsed % 60 )
+      
+      print(f"\rTiempo : {minutes:02d}:{seconds:02d} ", end="")
+      time.sleep(0.5)
+  except KeyboardInterrupt:
+    print("\nCronometro detenido") 
+if __name__ == "__main__":
+  main()

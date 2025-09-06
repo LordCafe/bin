@@ -1,0 +1,8 @@
+#!/bin/bash
+
+cd /var/www/html/Docker/Node  && docker compose \
+-f docker-compose-node.yml \
+down --remove-orphans
+
+
+#docker exec -it  nginx sh -c "mv /etc/nginx/conf.d/reactBuilder.conf /etc/nginx/conf.d/reactBuilder.conf-disabled"
