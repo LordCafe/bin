@@ -1,0 +1,192 @@
+#!/bin/bash
+set -e
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+# Load shared colors
+source "$HOME/bin/Docker/colors.sh"
+
+show_usage() {
+    echo -e "${BLUE}Smart Git Clone Tool${NC}"
+    echo -e "Usage: $(basename "$0") <repo> [branch] [options]"
+    echo
+    echo -e "${YELLOW}Examples:${NC}"
+    echo "  repo-get usuario/proyecto                    # Uses GIT_DEFAULT_HOST"
+    echo "  repo-get usuario/proyecto develop           # Specific branch"
+    echo "  repo-get https://github.com/user/repo.git   # Full URL"
+    echo "  repo-get gitlab.com/user/repo               # Specific host"
+    echo "  repo-get bitbucket.org/user/repo main       # Different provider"
+    echo
+    echo -e "${YELLOW}Options:${NC}"
+    echo "  -b, --branch <branch>  Specify branch explicitly"
+    echo "  -d, --dir <directory>  Override clone directory"
+    echo "  -h, --help            Show this help"
+}
+
+get_default_branch() {
+    local host="$1"
+    local repo_path="$2"
+    local token="$3"
+    
+    case "$host" in
+        "github.com")
+            if [[ -n "$token" ]]; then
+                curl -s -H "Authorization: token $token" \
+                     "https://api.github.com/repos/$repo_path" | \
+                     grep '"default_branch"' | \
+                     cut -d'"' -f4 2>/dev/null || echo "$GIT_DEFAULT_BRANCH"
+            else
+                echo "$GIT_DEFAULT_BRANCH"
+            fi
+            ;;
+        "gitlab.com")
+            if [[ -n "$token" ]]; then
+                local encoded_path
+                encoded_path=$(echo "$repo_path" | sed 's/\//%2F/g')
+                curl -s -H "Authorization: Bearer $token" \
+                     "https://gitlab.com/api/v4/projects/$encoded_path" | \
+                     grep '"default_branch"' | \
+                     cut -d'"' -f4 2>/dev/null || echo "$GIT_DEFAULT_BRANCH"
+            else
+                echo "$GIT_DEFAULT_BRANCH"
+            fi
+            ;;
+        *)
+            # For other hosts or when API is not available, use default
+            echo "$GIT_DEFAULT_BRANCH"
+            ;;
+    esac
+}
+
+parse_repo_url() {
+    local input="$1"
+    
+    if [[ "$input" =~ ^https?://([^/]+)/(.+) ]]; then
+        # Full URL: https://host.com/user/repo.git
+        local host="${BASH_REMATCH[1]}"
+        local path="${BASH_REMATCH[2]}" 
+        path=$(echo "$path" | sed 's/\.git$//')
+        echo "$host|$path"
+    elif [[ "$input" =~ ^([^/]+\.[^/]+)/(.+) ]]; then
+        # Host format: gitlab.com/user/repo
+        local host="${BASH_REMATCH[1]}"
+        local path="${BASH_REMATCH[2]}"
+        echo "$host|$path"
+    elif [[ "$input" =~ ^[^/]+/[^/]+$ ]]; then
+        # Short format: user/repo (uses default host)
+        echo "${GIT_DEFAULT_HOST:-github.com}|$input"
+    else
+        error "Invalid repository format: $input"
+        return 1
+    fi
+}
+
+clone_repo() {
+    local repo="$1"
+    local branch="${2:-}"
+    local clone_dir="${3:-$GIT_CLONE_DIR}"
+    
+    # Parse repository
+    local parsed_repo
+    parsed_repo=$(parse_repo_url "$repo") || return 1
+    
+    local host
+    local repo_path
+    IFS='|' read -r host repo_path <<< "$parsed_repo"
+    
+    # Determine branch
+    if [[ -z "$branch" ]]; then
+        info "Detecting default branch for $host/$repo_path..."
+        branch=$(get_default_branch "$host" "$repo_path" "$GIT_TOKEN")
+    fi
+    
+    # Build clone URL
+    local clone_url
+    if [[ -n "$GIT_TOKEN" && -n "$GIT_DEFAULT_USER" ]]; then
+        clone_url="https://${GIT_DEFAULT_USER}:${GIT_TOKEN}@${host}/${repo_path}.git"
+    else
+        clone_url="https://${host}/${repo_path}.git"
+    fi
+    
+    # Create clone directory if it doesn't exist
+    mkdir -p "$clone_dir"
+    
+    # Extract project name
+    local project_name
+    project_name=$(basename "$repo_path")
+    local target_dir="$clone_dir/$project_name"
+    
+    info "Cloning $host/$repo_path (branch: $branch) to $target_dir..."
+    
+    if git clone -b "$branch" "$clone_url" "$target_dir"; then
+        success "Repository cloned successfully!"
+        info "Location: $target_dir"
+        
+        # Change to the cloned directory
+        cd "$target_dir"
+        info "Changed to: $(pwd)"
+    else
+        error "Failed to clone repository"
+        return 1
+    fi
+}
+
+# Parse arguments
+REPO=""
+BRANCH=""
+CLONE_DIR=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -b|--branch)
+            BRANCH="$2"
+            shift 2
+            ;;
+        -d|--dir)
+            CLONE_DIR="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        -*)
+            error "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+        *)
+            if [[ -z "$REPO" ]]; then
+                REPO="$1"
+            elif [[ -z "$BRANCH" ]]; then
+                BRANCH="$1"
+            else
+                error "Too many arguments"
+                show_usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$REPO" ]]; then
+    error "Repository is required"
+    show_usage
+    exit 1
+fi
+
+# Check required environment variables
+if [[ -z "$GIT_CLONE_DIR" ]]; then
+    error "GIT_CLONE_DIR not configured in .env"
+    exit 1
+fi
+
+# Clone the repository
+clone_repo "$REPO" "$BRANCH" "${CLONE_DIR:-$GIT_CLONE_DIR}"
