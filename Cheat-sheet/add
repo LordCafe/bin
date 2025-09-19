@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# add - Agregar nota a un cheat-sheet y hacer commit automático
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+FILE="$DIR/$1.md"
+NOTE=$2
+DATE=$(date '+%Y-%m-%d %H:%M')
+ID=$(date '+%Y%m%d%H%M%S')
+
+if [[ -z "$1" ]]; then
+  echo "Uso: cheat add <archivo> \"nota\""
+  exit 1
+fi
+
+if [[ -z "$NOTE" ]]; then
+  echo "Debes escribir una nota"
+  exit 1
+fi
+
+# Crear directorio si no existe
+mkdir -p "$DIR"
+
+# Crear archivo si no existe
+if [[ ! -f "$FILE" ]]; then
+  echo "# $1" > "$FILE"
+  echo "" >> "$FILE"
+fi
+
+{
+  echo "<!-- cheat:start -->"
+  echo "id: $ID"
+  echo "note: $NOTE"
+  echo "date: $DATE"
+  echo "<!-- cheat:end -->"
+  echo ""
+} >> "$FILE"
+
+exit 1

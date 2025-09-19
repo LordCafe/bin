@@ -1,0 +1,37 @@
+#!/bin/bash 
+
+#Color
+
+# Load shared colors
+# shellcheck source=shared/colors.sh
+source "$(dirname "$0")/shared/colors.sh"
+
+DIRCOMMANDS="$HOME/bin/Drupal7"
+
+show_usage(){
+  echo -e "${BLUE} Drupal 7 Command Manager " 
+  echo -e "${GREEN} Usage: $(basename "$0" ) <command> [args ...]"
+  echo 
+  echo -e " ${YELLOW} avaible commands: ${NC} \n"
+  if [[ -d "$DIRCOMMANDS" ]]; then
+    find  "$DIRCOMMANDS" -maxdepth 1 -type f -executable -printf "%f\n" | sort | sed 's/\.sh$//'  
+  fi
+}
+
+if [[ $# -eq 0 ]]; then 
+  show_usage
+  exit 1
+fi
+
+cmd=$DIRCOMMANDS/$1
+
+shift 
+
+
+if [[ -x "$cmd" ]]; then
+  exec "$cmd" "$@"
+else
+  echo -e "${RED} Unknown command: $1 ${NC}"
+  show_usage
+  exit 1
+fi

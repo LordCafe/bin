@@ -1,0 +1,30 @@
+#!/bin/bash
+
+DIR=~/cheat-sheet
+SEARCH=$1
+
+if [[ -z "$SEARCH" ]]; then
+  echo "Uso: cheat regex <palabra>"
+  exit 1
+fi
+
+for FILE in "$DIR"/*.md; do
+  awk -v word="$SEARCH" '
+    /<!-- cheat:start -->/ {block=1; id=""; note=""; date=""; in_note=0}
+    /^id:/ {if(block) id=$2}
+    /^note:/ {if(block) in_note=1; note=""; next}
+    in_note && !/^date:/ {note = note "\n" $0; next}
+    /^date:/ {if(block) {date=substr($0,7); in_note=0}}
+    /<!-- cheat:end -->/ {
+      if(block && note ~ word) {
+        fname=FILENAME
+        sub(/^.*\//,"",fname)
+        sub(/\.md$/,"",fname)
+        print "\n"
+        print fname ": " id " → " note ""
+        print "\n" date
+      }
+      block=0
+    }
+  ' "$FILE"
+done

@@ -1,0 +1,48 @@
+#!/bin/bash 
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+source "$(dirname "$0")/shared/colors.sh"
+DIRCOMMANDS="${CHEAT_COMMANDS_DIR:-$HOME/bin/Cheat-sheet}"
+
+
+show_usage(){
+  echo -e "${BLUE} Cheat Sheet Command Manager " 
+  echo -e "${GREEN} Usage: $(basename "$0" ) <command> [args ...]"
+  echo 
+  echo -e " ${YELLOW} avaible commands: ${NC} \n"
+  if [[ -d "$DIRCOMMANDS" ]]; then
+    find  "$DIRCOMMANDS" -maxdepth 1 -type f -executable -printf "%f\n" | sort | sed 's/\.sh$//'  
+  fi
+}
+
+if [[ $# -eq 0 ]]; then 
+  show_usage
+  exit 1
+fi
+
+cmd=$DIRCOMMANDS/$1;
+params="$@"
+# Guardar todos los argumentos en un array
+ORIGINAL_ARGS=("$@")
+
+shift
+
+if [[ -x "$cmd" ]]; then
+  "$cmd" "$@"
+else
+  look=$DIRCOMMANDS/look
+  
+  if [[ -x "$look" ]]; then
+    "$look" "${ORIGINAL_ARGS[@]}"
+  else 
+    echo -e "${RED} Command not found: $cmd ${NC}"
+    exit 1
+  fi
+
+fi

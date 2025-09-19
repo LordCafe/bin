@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# look - Mostrar secciones de cheat-sheet con buscador por palabra clave
+
+FILE=~/cheat-sheet/$1.md
+SEARCH=$2
+
+if [[ ! -f "$FILE" ]]; then
+  echo -e "${RED}No se ha podido encontrar el archivo: $FILE${NC}"
+  exit 1
+fi
+
+if [[ -z "$SEARCH" ]]; then
+  # Si no se pasa búsqueda, mostrar índice
+  grep "^## " "$FILE"
+else
+  # Si el segundo argumento es un número, mostrar sección exacta
+  if [[ "$SEARCH" =~ ^[0-9]+$ ]]; then
+    awk -v n="$SEARCH" '/^## / {sec=$2} sec==n {print}' "$FILE"
+  else
+    # Buscar por palabra clave dentro de todo el archivo
+    echo -e "${BLUE}Buscando '$SEARCH' en $FILE...${NC}\n"
+    grep --color=always -i -n "$SEARCH" "$FILE"
+  fi
+fi

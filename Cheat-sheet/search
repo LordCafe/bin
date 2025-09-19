@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+SEARCH=$1
+
+if [[ -z "$SEARCH" ]]; then
+  echo "Uso: cheat search <palabra o tag>"
+  exit 1
+fi
+
+for FILE in "$DIR"/*.md; do
+  awk -v word="$SEARCH" '
+    /<!-- cheat:start -->/ {block=1; id=""; note=""; date=""; in_note=0; line_count=0}
+    /^id:/ {if(block) id=$2}
+    /^note:/ {if(block) in_note=1; note=""; line_count=0; next}
+    in_note && !/^date:/ {
+      note = note "\n" $0
+      lines[line_count++] = $0
+      next
+    }
+    /^date:/ {if(block) {date=substr($0,7); in_note=0}}
+    /<!-- cheat:end -->/ {
+      if(block && note ~ word) {
+        fname=FILENAME
+        sub(/^.*\//,"",fname)
+        sub(/\.md$/,"",fname)
+        print fname ": " id " →"
+        for(i=0;i<line_count && i<2;i++) print "   " lines[i]
+        print "   [" date "]\n"
+      }
+      delete lines
+      block=0
+    }
+  ' "$FILE"
+done

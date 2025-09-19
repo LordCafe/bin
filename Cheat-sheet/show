@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# cheat show - Mostrar nota por ID (minimalista, soporta notas largas y Markdown)
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+ID=$1
+
+if [[ -z "$ID" ]]; then
+  echo "Uso: cheat show <id>"
+  exit 1
+fi
+
+# Buscar el archivo que contiene el ID
+FILE=$(grep -ril "$ID" "$DIR"/*.md | head -n1)
+
+if [[ -z "$FILE" ]]; then
+  echo "Nota con ID $ID no encontrada"
+  exit 1
+fi
+
+# Si glow está disponible, mostrar la nota completa con renderizado Markdown
+if command -v glow &> /dev/null; then
+  # Extraer solo la nota dentro del bloque cheat:start/end
+  awk -v search="$ID" '
+    /<!-- cheat:start -->/ {block=1; id=""; note=""; date=""; in_note=0}
+    block && /^id:/ {id=$2}
+    block && /^note:/ {in_note=1; sub("note: ?", ""); note=$0; next}
+    block && in_note && !/^date:/ {note = note "\n" $0; next}
+    block && /^date:/ {in_note=0; sub("date: ", ""); date=$0}
+    /<!-- cheat:end -->/ {
+      block=0
+      if (id==search) {
+        print "# Archivo: " FILENAME "\n"
+        print note
+        print "\n*ID: " id " | Fecha: " date "*"
+      }
+    }
+  ' "$FILE" | glow --paging=never -s dark
+else
+  # Fallback minimalista sin glow
+  awk -v search="$ID" '
+    /<!-- cheat:start -->/ {block=1; id=""; note=""; date=""; in_note=0}
+    block && /^id:/ {id=$2}
+    block && /^note:/ {in_note=1; sub("note: ?", ""); note=$0; next}
+    block && in_note && !/^date:/ {note = note "\n" $0; next}
+    block && /^date:/ {in_note=0; sub("date: ", ""); date=$0}
+    /<!-- cheat:end -->/ {
+      block=0
+      if (id==search) {
+        fname=FILENAME
+        sub(/^.*\//,"",fname)
+        sub(/\.md$/,"",fname)
+        print "[ " fname " | " date " ]\n"
+        print note "\n"
+        print "(#" id ")"
+      }
+    }
+  ' "$FILE"
+fi
