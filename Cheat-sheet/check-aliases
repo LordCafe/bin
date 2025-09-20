@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# check-aliases - Verificar aliases duplicados en el knowledge base
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+
+echo "Verificando aliases únicos en tu knowledge base..."
+echo "="$(printf '%.0s' {1..50})
+
+# Crear archivo temporal con todos los aliases
+TEMP_ALIASES=$(mktemp)
+
+for FILE in "$DIR"/*.md; do
+  [[ ! -f "$FILE" ]] && continue
+  
+  FILENAME=$(basename "$FILE" .md)
+  
+  # Extraer aliases de cada entrada
+  awk -v filename="$FILENAME" '
+    /<!-- cheat:start -->/ {block=1; id=""; in_note=0}
+    block && /^id:/ {id=$2}
+    block && /^note:/ {in_note=1; next}
+    block && in_note && !/^date:/ {
+      # Buscar aliases en la línea
+      while (match($0, /@[a-zA-Z0-9_-]+/)) {
+        alias = substr($0, RSTART+1, RLENGTH-1)
+        print alias "|" filename "|" id
+        $0 = substr($0, RSTART+RLENGTH)
+      }
+      next
+    }
+    block && /^date:/ {in_note=0}
+    /<!-- cheat:end -->/ {block=0}
+  ' "$FILE"
+done > "$TEMP_ALIASES"
+
+# Verificar duplicados
+echo "Aliases encontrados:"
+echo
+
+DUPLICATES_FOUND=false
+
+while IFS='|' read -r alias filename id; do
+  [[ -z "$alias" ]] && continue
+  
+  # Contar cuántas veces aparece este alias
+  COUNT=$(grep "^$alias|" "$TEMP_ALIASES" | wc -l)
+  
+  if [[ $COUNT -gt 1 ]]; then
+    if [[ "$DUPLICATES_FOUND" == "false" ]]; then
+      echo "⚠️  ALIASES DUPLICADOS ENCONTRADOS:"
+      echo
+      DUPLICATES_FOUND=true
+    fi
+    
+    echo "🔴 Alias '@$alias' usado $COUNT veces:"
+    grep "^$alias|" "$TEMP_ALIASES" | while IFS='|' read -r dup_alias dup_file dup_id; do
+      echo "   - $dup_file.md (#$dup_id)"
+    done
+    echo
+  fi
+done < "$TEMP_ALIASES"
+
+if [[ "$DUPLICATES_FOUND" == "false" ]]; then
+  echo "✅ Todos los aliases son únicos!"
+  echo
+  echo "Aliases disponibles:"
+  sort "$TEMP_ALIASES" | while IFS='|' read -r alias filename id; do
+    [[ -n "$alias" ]] && echo "  @$alias → $filename.md (#$id)"
+  done
+else
+  echo "❌ Hay aliases duplicados que necesitan ser corregidos."
+  echo
+  echo "Recomendación: Usa aliases más específicos como:"
+  echo "  @login-prod, @login-staging"
+  echo "  @server-web, @server-db"
+fi
+
+rm "$TEMP_ALIASES"

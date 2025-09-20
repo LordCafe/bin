@@ -21,8 +21,18 @@ if [[ -z "$1" ]]; then
 fi
 
 if [[ -z "$NOTE" ]]; then
-  echo "Debes escribir una nota"
-  exit 1
+  # Si no hay nota, abrir editor
+  echo "Abriendo editor para crear nota en $1.md..."
+  TEMP_NOTE=$(mktemp)
+  EDITOR=${EDITOR:-nano}
+  "$EDITOR" "$TEMP_NOTE"
+  NOTE=$(cat "$TEMP_NOTE")
+  rm "$TEMP_NOTE"
+  
+  if [[ -z "$NOTE" ]]; then
+    echo "Nota vacía. Operación cancelada."
+    exit 0
+  fi
 fi
 
 # Crear directorio si no existe
@@ -34,9 +44,19 @@ if [[ ! -f "$FILE" ]]; then
   echo "" >> "$FILE"
 fi
 
+# Detectar si la nota tiene aliases (líneas que empiecen con @)
+ALIASES=""
+if [[ "$NOTE" == *"@"* ]]; then
+  # Extraer aliases de la nota
+  ALIASES=$(echo "$NOTE" | grep -o '@[a-zA-Z0-9_-]*' | tr '\n' ' ' | sed 's/^@//' | sed 's/ @/ /g')
+fi
+
 {
   echo "<!-- cheat:start -->"
   echo "id: $ID"
+  if [[ -n "$ALIASES" ]]; then
+    echo "aliases: $ALIASES"
+  fi
   echo "note: $NOTE"
   echo "date: $DATE"
   echo "<!-- cheat:end -->"

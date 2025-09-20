@@ -1,0 +1,85 @@
+#!/bin/bash
+
+# alias - Buscar nota por alias y mostrar contenido completo
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+INPUT=$1
+SPECIFIC_FILE=""
+ALIAS=""
+
+if [[ -z "$INPUT" ]]; then
+  echo "Uso: kb alias <alias>"
+  echo "     kb alias <archivo>:<alias>    # Buscar solo en archivo específico"
+  echo "Ejemplo: kb alias login"
+  echo "         kb alias credenciales:login"
+  exit 1
+fi
+
+# Detectar si es búsqueda específica por archivo (formato: archivo:alias)
+if [[ "$INPUT" == *":"* ]]; then
+  SPECIFIC_FILE=$(echo "$INPUT" | cut -d':' -f1)
+  ALIAS=$(echo "$INPUT" | cut -d':' -f2-)
+  
+  if [[ -z "$ALIAS" ]]; then
+    echo "Error: Debes especificar un alias después de ':'"
+    echo "Ejemplo: kb alias credenciales:login"
+    exit 1
+  fi
+  
+  echo "Buscando alias '$ALIAS' en $SPECIFIC_FILE.md..."
+else
+  ALIAS=$INPUT
+  echo "Buscando alias '$ALIAS'..."
+fi
+
+# Determinar qué archivos buscar
+if [[ -n "$SPECIFIC_FILE" ]]; then
+  # Búsqueda en archivo específico
+  TARGET_FILE="$DIR/$SPECIFIC_FILE.md"
+  if [[ ! -f "$TARGET_FILE" ]]; then
+    echo "Error: Archivo '$SPECIFIC_FILE.md' no encontrado en $DIR"
+    exit 1
+  fi
+  FILES=("$TARGET_FILE")
+else
+  # Búsqueda global
+  FILES=("$DIR"/*.md)
+fi
+
+# Buscar entrada que contenga el alias
+for FILE in "${FILES[@]}"; do
+  [[ ! -f "$FILE" ]] && continue
+  
+  # Buscar el ID de la entrada que contiene el alias
+  ENTRY_ID=$(grep -B 10 "@$ALIAS" "$FILE" | grep "^id:" | tail -1 | cut -d' ' -f2)
+  
+  if [[ -n "$ENTRY_ID" ]]; then
+    FILENAME=$(basename "$FILE" .md)
+    # Colores
+    GREEN='\033[0;32m'
+    NC='\033[0m'
+    
+    echo -e "${GREEN}Encontrado con alias '@$ALIAS':${NC}"
+    echo "="$(printf '%.0s' {1..50})
+    echo
+    "$HOME/bin/Cheat-sheet/show" "$ENTRY_ID"
+    exit 0
+  fi
+done
+
+echo "No se encontró ninguna nota con alias '$ALIAS'"
+echo
+echo "Para crear una nota con alias, usa:"
+echo "kb add archivo"
+echo "# En el editor, incluye @alias en tu nota:"
+echo "# @login @xysyxx"
+echo "# User: myuser"
+echo "# Pass: mypass"
+exit 1

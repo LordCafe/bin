@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# edit - Editar una entrada existente por ID
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+ID=$1
+
+if [[ -z "$ID" ]]; then
+  echo "Uso: kb edit <id>"
+  echo "Ejemplo: kb edit 20241205123456"
+  exit 1
+fi
+
+# Buscar primero por ID completo
+FILE=$(grep -rl "^id: $ID" "$DIR"/*.md 2>/dev/null | head -n1)
+
+# Si no se encuentra y el ID tiene 6 dígitos o menos, buscar por ID corto
+if [[ -z "$FILE" ]] && [[ ${#ID} -le 6 ]]; then
+  FILE=$(grep -rl "^id: .*$ID$" "$DIR"/*.md 2>/dev/null | head -n1)
+  if [[ -n "$FILE" ]]; then
+    # Obtener el ID completo
+    ID=$(grep "^id: .*$ID$" "$FILE" | cut -d' ' -f2)
+  fi
+fi
+
+if [[ -z "$FILE" ]]; then
+  echo "Error: Entrada con ID $ID no encontrada"
+  exit 1
+fi
+
+# Extraer la nota actual
+CURRENT_NOTE=$(awk -v search="$ID" '
+  /<!-- cheat:start -->/ {block=1; id=""; note=""; in_note=0}
+  block && /^id:/ {id=$2}
+  block && /^note:/ {in_note=1; sub("note: ?", ""); note=$0; next}
+  block && in_note && !/^date:/ {note = note "\n" $0; next}
+  block && /^date:/ {in_note=0}
+  /<!-- cheat:end -->/ {
+    block=0
+    if (id==search) {
+      print note
+      exit
+    }
+  }
+' "$FILE")
+
+echo "Editando entrada $ID"
+echo "Nota actual:"
+echo "="$(printf '%.0s' {1..30})
+echo "$CURRENT_NOTE"
+echo "="$(printf '%.0s' {1..30})
+echo
+
+# Crear archivo temporal con la nota actual
+TEMP_NOTE=$(mktemp)
+echo "$CURRENT_NOTE" > "$TEMP_NOTE"
+
+# Abrir editor
+EDITOR=${EDITOR:-nano}
+"$EDITOR" "$TEMP_NOTE"
+
+# Leer la nota editada
+NEW_NOTE=$(cat "$TEMP_NOTE")
+rm "$TEMP_NOTE"
+
+# Si no hay cambios, salir
+if [[ "$CURRENT_NOTE" == "$NEW_NOTE" ]]; then
+  echo "Sin cambios. Operación cancelada."
+  exit 0
+fi
+
+# Actualizar fecha
+NEW_DATE=$(date '+%Y-%m-%d %H:%M')
+
+# Crear archivo temporal con la entrada actualizada
+TEMP_FILE=$(mktemp)
+awk -v search="$ID" -v new_note="$NEW_NOTE" -v new_date="$NEW_DATE" '
+  /<!-- cheat:start -->/ {
+    block=1; id=""; buffer=""; in_note=0
+    buffer = buffer $0 "\n"
+    next
+  }
+  block {
+    if (/^id:/) {
+      id=$2
+      buffer = buffer $0 "\n"
+      in_note=0
+    } else if (/^note:/) {
+      if (id == search) {
+        buffer = buffer "note: " new_note "\n"
+        in_note=1
+      } else {
+        buffer = buffer $0 "\n"
+        in_note=1
+      }
+    } else if (/^date:/) {
+      if (id == search) {
+        buffer = buffer "date: " new_date "\n"
+      } else {
+        buffer = buffer $0 "\n"
+      }
+      in_note=0
+    } else if (/<!-- cheat:end -->/) {
+      buffer = buffer $0 "\n"
+      printf "%s", buffer
+      block=0; buffer=""; in_note=0
+    } else {
+      # Solo agregar líneas que no sean parte de la nota que estamos editando
+      if (id != search || !in_note) {
+        buffer = buffer $0 "\n"
+      }
+    }
+    next
+  }
+  !block {print}
+' "$FILE" > "$TEMP_FILE"
+
+# Reemplazar archivo original
+mv "$TEMP_FILE" "$FILE"
+
+echo "✓ Entrada $ID actualizada exitosamente"

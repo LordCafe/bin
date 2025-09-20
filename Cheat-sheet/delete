@@ -1,0 +1,99 @@
+#!/bin/bash
+
+# delete - Borrar una entrada por ID
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+ID=$1
+
+if [[ -z "$ID" ]]; then
+  echo "Uso: kb delete <id>"
+  echo "Ejemplo: kb delete 20241205123456"
+  exit 1
+fi
+
+# Buscar primero por ID completo
+FILE=$(grep -rl "^id: $ID" "$DIR"/*.md 2>/dev/null | head -n1)
+
+# Si no se encuentra y el ID tiene 6 dígitos o menos, buscar por ID corto
+if [[ -z "$FILE" ]] && [[ ${#ID} -le 6 ]]; then
+  FILE=$(grep -rl "^id: .*$ID$" "$DIR"/*.md 2>/dev/null | head -n1)
+  if [[ -n "$FILE" ]]; then
+    # Obtener el ID completo para el resto del script
+    ID=$(grep "^id: .*$ID$" "$FILE" | cut -d' ' -f2)
+  fi
+fi
+
+if [[ -z "$FILE" ]]; then
+  echo "Error: Entrada con ID $ID no encontrada"
+  exit 1
+fi
+
+# Mostrar la entrada antes de borrar
+echo "Entrada a borrar:"
+echo "="$(printf '%.0s' {1..50})
+
+FILENAME=$(basename "$FILE" .md)
+awk -v search="$ID" -v filename="$FILENAME" '
+  /<!-- cheat:start -->/ {block=1; id=""; note=""; date=""; in_note=0}
+  block && /^id:/ {id=$2}
+  block && /^note:/ {in_note=1; sub("note: ?", ""); note=$0; next}
+  block && in_note && !/^date:/ {note = note "\n" $0; next}
+  block && /^date:/ {in_note=0; sub("date: ", ""); date=$0}
+  /<!-- cheat:end -->/ {
+    block=0
+    if (id==search) {
+      # Extraer solo hora:minuto de la fecha
+      split(date, datetime, " ")
+      time = datetime[2]
+      
+      # Extraer últimos 6 dígitos del ID
+      short_id = substr(id, length(id)-5)
+      
+      print filename " • " time " • #" short_id
+      print ""
+      print note
+      print ""
+    }
+  }
+' "$FILE"
+
+# Confirmar borrado
+read -p "¿Estás seguro de borrar esta entrada? (y/N): " confirm
+if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+  echo "Operación cancelada"
+  exit 0
+fi
+
+# Crear archivo temporal sin la entrada
+TEMP_FILE=$(mktemp)
+awk -v search="$ID" '
+  /<!-- cheat:start -->/ {
+    block=1; id=""; buffer=""
+    buffer = buffer $0 "\n"
+    next
+  }
+  block {
+    buffer = buffer $0 "\n"
+    if (/^id:/) id=$2
+    if (/<!-- cheat:end -->/) {
+      if (id != search) {
+        printf "%s", buffer
+      }
+      block=0; buffer=""
+    }
+    next
+  }
+  !block {print}
+' "$FILE" > "$TEMP_FILE"
+
+# Reemplazar archivo original
+mv "$TEMP_FILE" "$FILE"
+
+echo "✓ Entrada $ID borrada exitosamente"

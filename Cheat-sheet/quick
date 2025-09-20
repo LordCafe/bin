@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# quick - Acceso rápido a notas por keyword
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+KEYWORD=$1
+
+if [[ -z "$KEYWORD" ]]; then
+  echo "Uso: kb quick <keyword>"
+  echo "Ejemplo: kb quick login"
+  exit 1
+fi
+
+echo "Buscando '$KEYWORD'..."
+
+# Buscar primera entrada que contenga el keyword
+for FILE in "$DIR"/*.md; do
+  [[ ! -f "$FILE" ]] && continue
+  
+  RESULT=$(awk -v word="$KEYWORD" '
+    /<!-- cheat:start -->/ {block=1; id=""; note=""; date=""; in_note=0}
+    block && /^id:/ {id=$2}
+    block && /^note:/ {in_note=1; sub("note: ?", ""); note=$0; next}
+    block && in_note && !/^date:/ {note = note "\n" $0; next}
+    block && /^date:/ {in_note=0; sub("date: ", ""); date=$0}
+    /<!-- cheat:end -->/ {
+      block=0
+      if (note ~ word) {
+        fname=FILENAME
+        sub(/^.*\//,"",fname)
+        sub(/\.md$/,"",fname)
+        print "FOUND|" fname "|" id "|" date "|" note
+        exit
+      }
+    }
+  ' "$FILE")
+  
+  if [[ -n "$RESULT" ]]; then
+    # Extraer datos del resultado
+    IFS='|' read -r FOUND FOUND_FILE FOUND_ID FOUND_DATE FOUND_NOTE <<< "$RESULT"
+    
+    echo "Encontrado en $FOUND_FILE.md:"
+    echo "="$(printf '%.0s' {1..40})
+    echo "[$FOUND_DATE] (#$FOUND_ID)"
+    echo "$FOUND_NOTE"
+    echo
+    exit 0
+  fi
+done
+
+echo "No se encontró ninguna nota con '$KEYWORD'"
+exit 1

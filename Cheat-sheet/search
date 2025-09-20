@@ -9,13 +9,58 @@ fi
 
 DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
 SEARCH=$1
+SPECIFIC_FILE=""
 
 if [[ -z "$SEARCH" ]]; then
-  echo "Uso: cheat search <palabra o tag>"
-  exit 1
+  echo "Archivos disponibles en tu knowledge base:"
+  echo "="$(printf '%.0s' {1..40})
+  
+  for FILE in "$DIR"/*.md; do
+    if [[ -f "$FILE" ]]; then
+      filename=$(basename "$FILE" .md)
+      # Contar entradas en el archivo
+      entry_count=$(grep -c "<!-- cheat:start -->" "$FILE" 2>/dev/null || echo "0")
+      printf "  %-20s (%d entradas)\n" "$filename" "$entry_count"
+    fi
+  done
+  
+  echo
+  echo "Uso: kb search <palabra>           # Buscar en todas las notas"
+  echo "     kb search <archivo>:<palabra> # Buscar solo en un archivo específico"
+  echo "     kb show <archivo>            # Ver últimas entradas de un archivo"
+  exit 0
 fi
 
-for FILE in "$DIR"/*.md; do
+# Detectar si es búsqueda específica por archivo (formato: archivo:término)
+if [[ "$SEARCH" == *":"* ]]; then
+  SPECIFIC_FILE=$(echo "$SEARCH" | cut -d':' -f1)
+  SEARCH=$(echo "$SEARCH" | cut -d':' -f2-)
+  
+  if [[ -z "$SEARCH" ]]; then
+    echo "Error: Debes especificar un término de búsqueda después de ':'"
+    echo "Ejemplo: kb search bash:chmod"
+    exit 1
+  fi
+fi
+
+# Determinar qué archivos buscar
+if [[ -n "$SPECIFIC_FILE" ]]; then
+  # Búsqueda en archivo específico
+  TARGET_FILE="$DIR/$SPECIFIC_FILE.md"
+  if [[ ! -f "$TARGET_FILE" ]]; then
+    echo "Error: Archivo '$SPECIFIC_FILE.md' no encontrado en $DIR"
+    exit 1
+  fi
+  FILES=("$TARGET_FILE")
+  echo "Buscando '$SEARCH' en $SPECIFIC_FILE.md:"
+  echo "="$(printf '%.0s' {1..40})
+else
+  # Búsqueda global
+  FILES=("$DIR"/*.md)
+fi
+
+for FILE in "${FILES[@]}"; do
+  [[ ! -f "$FILE" ]] && continue
   awk -v word="$SEARCH" '
     /<!-- cheat:start -->/ {block=1; id=""; note=""; date=""; in_note=0; line_count=0}
     /^id:/ {if(block) id=$2}
