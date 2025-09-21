@@ -24,20 +24,26 @@ for FILE in "$DIR"/*.md; do
   
   # Extraer aliases de cada entrada
   awk -v filename="$FILENAME" '
-    /<!-- cheat:start -->/ {block=1; id=""; in_note=0}
+    /<!-- cheat:start -->/ {block=1; id=""; note_line=""; in_note=0}
     block && /^id:/ {id=$2}
-    block && /^note:/ {in_note=1; next}
+    block && /^note:/ {in_note=1; sub("note: ?", ""); note_line=$0; next}
     block && in_note && !/^date:/ {
-      # Buscar aliases en la línea
-      while (match($0, /@[a-zA-Z0-9_-]+/)) {
-        alias = substr($0, RSTART+1, RLENGTH-1)
-        print alias "|" filename "|" id
-        $0 = substr($0, RSTART+RLENGTH)
-      }
+      note_line = note_line "\n" $0
       next
     }
     block && /^date:/ {in_note=0}
-    /<!-- cheat:end -->/ {block=0}
+    /<!-- cheat:end -->/ {
+      if (block && id && note_line) {
+        # Buscar todos los aliases en el contenido completo de la nota
+        temp_note = note_line
+        while (match(temp_note, /@[a-zA-Z0-9_-][a-zA-Z0-9_-]*/)) {
+          alias = substr(temp_note, RSTART+1, RLENGTH-1)
+          print alias "|" filename "|" id
+          temp_note = substr(temp_note, RSTART+RLENGTH)
+        }
+      }
+      block=0; note_line=""
+    }
   ' "$FILE"
 done > "$TEMP_ALIASES"
 
@@ -47,7 +53,8 @@ echo
 
 DUPLICATES_FOUND=false
 
-while IFS='|' read -r alias filename id; do
+# Obtener aliases únicos para verificar duplicados
+sort "$TEMP_ALIASES" | uniq | while IFS='|' read -r alias filename id; do
   [[ -z "$alias" ]] && continue
   
   # Contar cuántas veces aparece este alias
@@ -61,12 +68,12 @@ while IFS='|' read -r alias filename id; do
     fi
     
     echo "🔴 Alias '@$alias' usado $COUNT veces:"
-    grep "^$alias|" "$TEMP_ALIASES" | while IFS='|' read -r dup_alias dup_file dup_id; do
+    grep "^$alias|" "$TEMP_ALIASES" | sort | uniq | while IFS='|' read -r dup_alias dup_file dup_id; do
       echo "   - $dup_file.md (#$dup_id)"
     done
     echo
   fi
-done < "$TEMP_ALIASES"
+done
 
 if [[ "$DUPLICATES_FOUND" == "false" ]]; then
   echo "✅ Todos los aliases son únicos!"

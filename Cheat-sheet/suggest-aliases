@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# suggest-aliases - Sugerir aliases similares cuando no se encuentra coincidencia exacta
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+SEARCH_TERM=$1
+MAX_SUGGESTIONS=${2:-5}
+
+if [[ -z "$SEARCH_TERM" ]]; then
+  echo "Uso: suggest-aliases <término> [max_sugerencias]"
+  exit 1
+fi
+
+echo "¿Quisiste decir alguno de estos?"
+echo
+
+# Obtener todos los aliases disponibles
+TEMP_ALIASES=$(mktemp)
+
+for FILE in "$DIR"/*.md; do
+  [[ ! -f "$FILE" ]] && continue
+  
+  FILENAME=$(basename "$FILE" .md)
+  
+  # Extraer aliases de cada archivo
+  awk -v filename="$FILENAME" '
+    /<!-- cheat:start -->/ {block=1; id=""; note_line=""; in_note=0}
+    block && /^id:/ {id=$2}
+    block && /^note:/ {in_note=1; sub("note: ?", ""); note_line=$0; next}
+    block && in_note && !/^date:/ {
+      note_line = note_line "\n" $0
+      next
+    }
+    block && /^date:/ {in_note=0}
+    /<!-- cheat:end -->/ {
+      if (block && id && note_line) {
+        temp_note = note_line
+        while (match(temp_note, /@[a-zA-Z0-9_-][a-zA-Z0-9_-]*/)) {
+          alias = substr(temp_note, RSTART+1, RLENGTH-1)
+          print alias "|" filename
+          temp_note = substr(temp_note, RSTART+RLENGTH)
+        }
+      }
+      block=0; note_line=""
+    }
+  ' "$FILE"
+done > "$TEMP_ALIASES"
+
+# Buscar aliases similares usando fuzzy matching simple
+# 1. Aliases que contengan el término
+grep -i "$SEARCH_TERM" "$TEMP_ALIASES" | head -n "$MAX_SUGGESTIONS" | while IFS='|' read -r alias filename; do
+  echo "  @$alias ($filename.md)"
+done
+
+# 2. Si no hay coincidencias, mostrar aliases que empiecen similar
+if [[ $(grep -i "$SEARCH_TERM" "$TEMP_ALIASES" | wc -l) -eq 0 ]]; then
+  # Buscar por primera letra
+  FIRST_CHAR=${SEARCH_TERM:0:1}
+  grep "^$FIRST_CHAR" "$TEMP_ALIASES" | head -n "$MAX_SUGGESTIONS" | while IFS='|' read -r alias filename; do
+    echo "  @$alias ($filename.md)"
+  done
+fi
+
+# 3. Si aún no hay coincidencias, mostrar algunos aliases aleatorios
+if [[ $(grep -i "$SEARCH_TERM" "$TEMP_ALIASES" | wc -l) -eq 0 ]] && [[ $(grep "^${SEARCH_TERM:0:1}" "$TEMP_ALIASES" | wc -l) -eq 0 ]]; then
+  echo "Aliases disponibles:"
+  sort "$TEMP_ALIASES" | head -n "$MAX_SUGGESTIONS" | while IFS='|' read -r alias filename; do
+    echo "  @$alias ($filename.md)"
+  done
+fi
+
+rm "$TEMP_ALIASES"

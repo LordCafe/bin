@@ -1,4 +1,7 @@
-#!/bin/bash 
+#!/bin/bash
+
+# kb - Knowledge Base Terminal - Your Second Brain in the Terminal
+# Main command dispatcher
 
 # Load environment variables
 if [ -f "$HOME/bin/.env" ]; then 
@@ -7,9 +10,8 @@ if [ -f "$HOME/bin/.env" ]; then
     set +a
 fi
 
-source "$(dirname "$0")/shared/colors.sh"
-DIRCOMMANDS="${CHEAT_COMMANDS_DIR:-$HOME/bin/Cheat-sheet}"
-
+COMMANDS_DIR="$HOME/bin/Cheat-sheet"
+VERSION="1.0.0"
 
 show_help() {
     cat << 'EOF'
@@ -66,16 +68,9 @@ VERSION: 1.0.0
 EOF
 }
 
-show_usage(){
-  echo -e "${BLUE} KB Terminal - Your Second Brain in the Terminal ${NC}" 
-  echo -e "${GREEN} Usage: $(basename "$0" ) <command> [args ...]${NC}"
-  echo 
-  echo -e " ${YELLOW} Available commands: ${NC} \n"
-  if [[ -d "$DIRCOMMANDS" ]]; then
-    find  "$DIRCOMMANDS" -maxdepth 1 -type f -executable -printf "%f\n" | sort | sed 's/\.sh$//'  
-  fi
-  echo
-  echo -e "${CYAN}Use 'kb --help' for detailed usage and examples${NC}"
+show_version() {
+    echo "KB Terminal v$VERSION"
+    echo "Your Second Brain in the Terminal"
 }
 
 # Handle help and version flags
@@ -85,33 +80,32 @@ case "$1" in
         exit 0
         ;;
     --version|-v|version)
-        echo "KB Terminal v1.0.0"
-        echo "Your Second Brain in the Terminal"
+        show_version
         exit 0
         ;;
     "")
-        show_usage
+        echo "KB Terminal - Your Second Brain in the Terminal"
+        echo
+        echo "Use 'kb --help' for usage information"
+        echo "Use 'kb add <file>' to create your first entry"
         exit 1
         ;;
 esac
 
-cmd=$DIRCOMMANDS/$1;
-params="$@"
-# Guardar todos los argumentos en un array
-ORIGINAL_ARGS=("$@")
-
+# Get command and shift arguments
+COMMAND=$1
 shift
 
-if [[ -x "$cmd" ]]; then
-  "$cmd" "$@"
-else
-  look=$DIRCOMMANDS/look
-  
-  if [[ -x "$look" ]]; then
-    "$look" "${ORIGINAL_ARGS[@]}"
-  else 
-    echo -e "${RED} Command not found: $cmd ${NC}"
+# Check if command exists
+if [[ ! -f "$COMMANDS_DIR/$COMMAND" ]]; then
+    echo "Error: Unknown command '$COMMAND'"
+    echo
+    echo "Available commands:"
+    echo "  add, show, alias, edit, delete, search, check-aliases"
+    echo
+    echo "Use 'kb --help' for detailed usage"
     exit 1
-  fi
-
 fi
+
+# Execute the command
+exec "$COMMANDS_DIR/$COMMAND" "$@"

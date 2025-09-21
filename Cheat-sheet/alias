@@ -10,15 +10,32 @@ if [ -f "$HOME/bin/.env" ]; then
 fi
 
 DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
-INPUT=$1
+SUGGESTIONS=false
+INPUT=""
 SPECIFIC_FILE=""
 ALIAS=""
+
+# Parse flags
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -s|--suggestions)
+      SUGGESTIONS=true
+      shift
+      ;;
+    *)
+      INPUT="$1"
+      shift
+      ;;
+  esac
+done
 
 if [[ -z "$INPUT" ]]; then
   echo "Uso: kb alias <alias>"
   echo "     kb alias <archivo>:<alias>    # Buscar solo en archivo específico"
+  echo "     kb alias -s <alias>          # Mostrar sugerencias si no se encuentra"
   echo "Ejemplo: kb alias login"
   echo "         kb alias credenciales:login"
+  echo "         kb alias -s aguacate"
   exit 1
 fi
 
@@ -53,12 +70,13 @@ else
   FILES=("$DIR"/*.md)
 fi
 
-# Buscar entrada que contenga el alias
+# Primero buscar match exacto
+EXACT_MATCH_FOUND=false
 for FILE in "${FILES[@]}"; do
   [[ ! -f "$FILE" ]] && continue
   
-  # Buscar el ID de la entrada que contiene el alias
-  ENTRY_ID=$(grep -B 10 "@$ALIAS" "$FILE" | grep "^id:" | tail -1 | cut -d' ' -f2)
+  # Buscar el ID de la entrada que contiene exactamente el alias
+  ENTRY_ID=$(grep -B 10 "@$ALIAS[^a-zA-Z0-9_-]\|@$ALIAS$" "$FILE" | grep "^id:" | tail -1 | cut -d' ' -f2)
   
   if [[ -n "$ENTRY_ID" ]]; then
     FILENAME=$(basename "$FILE" .md)
@@ -70,16 +88,81 @@ for FILE in "${FILES[@]}"; do
     echo "="$(printf '%.0s' {1..50})
     echo
     "$HOME/bin/Cheat-sheet/show" "$ENTRY_ID"
+    EXACT_MATCH_FOUND=true
     exit 0
   fi
 done
 
+# Si no hay match exacto, buscar matches parciales
+if [[ "$EXACT_MATCH_FOUND" == "false" ]]; then
+  echo "No se encontró alias exacto '@$ALIAS'"
+  echo
+  
+  # Crear archivo temporal para almacenar matches parciales
+  TEMP_MATCHES=$(mktemp)
+  
+  for FILE in "${FILES[@]}"; do
+    [[ ! -f "$FILE" ]] && continue
+    FILENAME=$(basename "$FILE" .md)
+    
+    # Extraer aliases que contengan el término
+    awk -v filename="$FILENAME" -v search="$ALIAS" '
+      /<!-- cheat:start -->/ {block=1; id=""; note_line=""; in_note=0}
+      block && /^id:/ {id=$2}
+      block && /^note:/ {in_note=1; sub("note: ?", ""); note_line=$0; next}
+      block && in_note && !/^date:/ {
+        note_line = note_line "\n" $0
+        next
+      }
+      block && /^date:/ {in_note=0}
+      /<!-- cheat:end -->/ {
+        if (block && id && note_line) {
+          temp_note = note_line
+          while (match(temp_note, /@[a-zA-Z0-9_-][a-zA-Z0-9_-]*/)) {
+            alias = substr(temp_note, RSTART+1, RLENGTH-1)
+            if (index(alias, search) > 0) {
+              print "  @" alias " → " filename ".md (#" id ")"
+            }
+            temp_note = substr(temp_note, RSTART+RLENGTH)
+          }
+        }
+        block=0; note_line=""
+      }
+    ' "$FILE"
+  done | sort | uniq > "$TEMP_MATCHES"
+  
+  if [[ -s "$TEMP_MATCHES" ]]; then
+    echo "Aliases que contienen '$ALIAS':"
+    echo
+    cat "$TEMP_MATCHES"
+    echo
+    echo "Para ver el contenido, usa el alias exacto:"
+    echo "Ejemplo: kb alias docker-dev"
+  fi
+  
+  rm "$TEMP_MATCHES"
+  exit 0
+fi
+
 echo "No se encontró ninguna nota con alias '$ALIAS'"
 echo
+
+# Mostrar sugerencias solo si se usó la flag -s
+if [[ "$SUGGESTIONS" == "true" ]]; then
+  "$HOME/bin/Cheat-sheet/suggest-aliases" "$ALIAS"
+  echo
+fi
+
 echo "Para crear una nota con alias, usa:"
 echo "kb add archivo"
 echo "# En el editor, incluye @alias en tu nota:"
 echo "# @login @xysyxx"
 echo "# User: myuser"
 echo "# Pass: mypass"
+
+if [[ "$SUGGESTIONS" == "false" ]]; then
+  echo
+  echo "Tip: Usa 'kb alias -s $ALIAS' para ver sugerencias"
+fi
+
 exit 1

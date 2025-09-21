@@ -1,0 +1,184 @@
+#!/bin/bash
+
+# section - Extraer secciones específicas de documentos markdown
+
+# Load environment variables
+if [ -f "$HOME/bin/.env" ]; then 
+    set -a
+    source "$HOME/bin/.env"
+    set +a
+fi
+
+DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
+INPUT=$1
+SPECIFIC_FILE=""
+SECTION=""
+
+if [[ -z "$INPUT" ]]; then
+  echo "Uso: kb section <archivo>:<sección>"
+  echo "     kb section <sección>           # Buscar en todos los archivos"
+  echo "Ejemplo: kb section docker:installation"
+  echo "         kb section docker:config/basic"
+  echo "         kb section installation"
+  exit 1
+fi
+
+# Detectar si es búsqueda específica por archivo (formato: archivo:sección)
+if [[ "$INPUT" == *":"* ]]; then
+  SPECIFIC_FILE=$(echo "$INPUT" | cut -d':' -f1)
+  SECTION=$(echo "$INPUT" | cut -d':' -f2-)
+  
+  if [[ -z "$SECTION" ]]; then
+    echo "Error: Debes especificar una sección después de ':'"
+    echo "Ejemplo: kb section docker:installation"
+    exit 1
+  fi
+  
+  echo "Buscando sección '$SECTION' en $SPECIFIC_FILE.md..."
+else
+  SECTION=$INPUT
+  echo "Buscando sección '$SECTION' en todos los archivos..."
+fi
+
+# Determinar qué archivos buscar
+if [[ -n "$SPECIFIC_FILE" ]]; then
+  # Búsqueda en archivo específico
+  TARGET_FILE="$DIR/$SPECIFIC_FILE.md"
+  if [[ ! -f "$TARGET_FILE" ]]; then
+    echo "Error: Archivo '$SPECIFIC_FILE.md' no encontrado en $DIR"
+    exit 1
+  fi
+  FILES=("$TARGET_FILE")
+else
+  # Búsqueda global
+  FILES=("$DIR"/*.md)
+fi
+
+# Colores
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+FOUND=false
+
+# Buscar sección en archivos
+for FILE in "${FILES[@]}"; do
+  [[ ! -f "$FILE" ]] && continue
+  
+  FILENAME=$(basename "$FILE" .md)
+  
+  # Buscar sección usando AWK
+  SECTION_CONTENT=$(awk -v section="$SECTION" -v filename="$FILENAME" '
+    BEGIN {
+      # Convertir sección a patrón de búsqueda
+      # docker:config/basic -> buscar ## Config, luego ### Basic
+      if (index(section, "/") > 0) {
+        split(section, parts, "/")
+        main_section = parts[1]
+        sub_section = parts[2]
+        search_pattern = "^## .*" tolower(main_section)
+        sub_pattern = "^### .*" tolower(sub_section)
+        nested_search = 1
+      } else {
+        search_pattern = "^## .*" tolower(section)
+        nested_search = 0
+      }
+      
+      in_section = 0
+      in_subsection = 0
+      found_section = 0
+    }
+    
+    # Buscar dentro de bloques cheat
+    /<!-- cheat:start -->/ {in_cheat=1; content=""; next}
+    /<!-- cheat:end -->/ {
+      if (in_cheat && found_section) {
+        print content
+        exit 0
+      }
+      in_cheat=0; found_section=0; content=""
+      next
+    }
+    
+    in_cheat {
+      # Saltar metadatos
+      if (/^id:/ || /^date:/ || /^note:/) next
+      
+      # Detectar headers
+      if (/^##[^#]/) {
+        current_h2 = tolower($0)
+        gsub(/^## */, "", current_h2)
+        
+        if (nested_search) {
+          # Búsqueda anidada: primero encontrar ## main_section
+          if (index(current_h2, tolower(main_section)) > 0) {
+            in_section = 1
+            in_subsection = 0
+          } else {
+            in_section = 0
+            in_subsection = 0
+          }
+        } else {
+          # Búsqueda simple: ## section
+          if (index(current_h2, tolower(section)) > 0) {
+            in_section = 1
+            found_section = 1
+            content = content $0 "\n"
+          } else {
+            in_section = 0
+          }
+        }
+        next
+      }
+      
+      if (/^###[^#]/ && nested_search && in_section) {
+        current_h3 = tolower($0)
+        gsub(/^### */, "", current_h3)
+        
+        if (index(current_h3, tolower(sub_section)) > 0) {
+          in_subsection = 1
+          found_section = 1
+          content = content "## " main_section "\n"
+          content = content $0 "\n"
+        } else {
+          in_subsection = 0
+        }
+        next
+      }
+      
+      # Recopilar contenido
+      if ((in_section && !nested_search) || (in_subsection && nested_search)) {
+        content = content $0 "\n"
+      }
+    }
+  ' "$FILE")
+  
+  if [[ -n "$SECTION_CONTENT" ]]; then
+    if [[ "$FOUND" == "false" ]]; then
+      echo -e "${GREEN}Sección encontrada:${NC}"
+      echo -e "${YELLOW}$FILENAME • $SECTION${NC}"
+      echo "="$(printf '%.0s' {1..50})
+      echo
+      FOUND=true
+    fi
+    
+    # Usar pager si el contenido es largo
+    LINE_COUNT=$(echo "$SECTION_CONTENT" | wc -l)
+    TERMINAL_LINES=$(tput lines 2>/dev/null || echo 24)
+    if [[ $LINE_COUNT -gt $TERMINAL_LINES ]]; then
+      echo "$SECTION_CONTENT" | less -R
+    else
+      echo "$SECTION_CONTENT"
+    fi
+    
+    # Si búsqueda específica, salir después del primer match
+    [[ -n "$SPECIFIC_FILE" ]] && exit 0
+  fi
+done
+
+if [[ "$FOUND" == "false" ]]; then
+  echo "No se encontró la sección '$SECTION'"
+  echo
+  echo "Tip: Las secciones se buscan en headers markdown (## Título)"
+  echo "Ejemplo: kb section docker:installation busca '## Installation'"
+fi

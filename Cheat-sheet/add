@@ -44,19 +44,9 @@ if [[ ! -f "$FILE" ]]; then
   echo "" >> "$FILE"
 fi
 
-# Detectar si la nota tiene aliases (líneas que empiecen con @)
-ALIASES=""
-if [[ "$NOTE" == *"@"* ]]; then
-  # Extraer aliases de la nota
-  ALIASES=$(echo "$NOTE" | grep -o '@[a-zA-Z0-9_-]*' | tr '\n' ' ' | sed 's/^@//' | sed 's/ @/ /g')
-fi
-
 {
   echo "<!-- cheat:start -->"
   echo "id: $ID"
-  if [[ -n "$ALIASES" ]]; then
-    echo "aliases: $ALIASES"
-  fi
   echo "note: $NOTE"
   echo "date: $DATE"
   echo "<!-- cheat:end -->"

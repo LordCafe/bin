@@ -8,8 +8,23 @@ if [ -f "$HOME/bin/.env" ]; then
 fi
 
 DIR="${CHEAT_SHEETS_DIR:-$HOME/cheat-sheet}"
-SEARCH=$1
+SUGGESTIONS=false
+SEARCH=""
 SPECIFIC_FILE=""
+
+# Parse flags
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -s|--suggestions)
+      SUGGESTIONS=true
+      shift
+      ;;
+    *)
+      SEARCH="$1"
+      shift
+      ;;
+  esac
+done
 
 if [[ -z "$SEARCH" ]]; then
   echo "Archivos disponibles en tu knowledge base:"
@@ -27,6 +42,7 @@ if [[ -z "$SEARCH" ]]; then
   echo
   echo "Uso: kb search <palabra>           # Buscar en todas las notas"
   echo "     kb search <archivo>:<palabra> # Buscar solo en un archivo específico"
+  echo "     kb search -s <palabra>        # Mostrar sugerencias si no hay resultados"
   echo "     kb show <archivo>            # Ver últimas entradas de un archivo"
   exit 0
 fi
@@ -59,9 +75,11 @@ else
   FILES=("$DIR"/*.md)
 fi
 
+RESULTS_FOUND=false
+
 for FILE in "${FILES[@]}"; do
   [[ ! -f "$FILE" ]] && continue
-  awk -v word="$SEARCH" '
+  RESULT=$(awk -v word="$SEARCH" '
     /<!-- cheat:start -->/ {block=1; id=""; note=""; date=""; in_note=0; line_count=0}
     /^id:/ {if(block) id=$2}
     /^note:/ {if(block) in_note=1; note=""; line_count=0; next}
@@ -79,9 +97,28 @@ for FILE in "${FILES[@]}"; do
         print fname ": " id " →"
         for(i=0;i<line_count && i<2;i++) print "   " lines[i]
         print "   [" date "]\n"
+        found=1
       }
       delete lines
       block=0
     }
-  ' "$FILE"
+    END {if(found) exit 0; else exit 1}
+  ' "$FILE")
+  
+  if [[ $? -eq 0 ]]; then
+    echo "$RESULT"
+    RESULTS_FOUND=true
+  fi
 done
+
+# Si no se encontraron resultados y se usó la flag -s, mostrar sugerencias
+if [[ "$RESULTS_FOUND" == "false" ]]; then
+  echo "No se encontraron resultados para '$SEARCH'"
+  echo
+  
+  if [[ "$SUGGESTIONS" == "true" ]]; then
+    "$HOME/bin/Cheat-sheet/suggest-aliases" "$SEARCH"
+  else
+    echo "Tip: Usa 'kb search -s $SEARCH' para ver sugerencias de aliases similares"
+  fi
+fi
